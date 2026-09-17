@@ -94,9 +94,9 @@ void req_buf_free(req_buf *b);
 int req_buf_append(req_buf *b, const void *s, size_t n);
 
 int req_io_read(req_conn *cn, void *buf, int n, int64_t deadline);
-int req_io_write_all(req_conn *cn, const void *buf, size_t n, int64_t deadline);
+req_err req_io_write_all(req_conn *cn, const void *buf, size_t n, int64_t deadline);
 void req_conn_close(req_conn *cn);
 
-int req_connect_host(req_client *c, req_conn *cn, const req_url *u, int64_t deadline);
+req_err req_connect_host(req_client *c, req_conn *cn, const req_url *u, int64_t deadline);
 
 #endif

@@ -43,7 +43,7 @@ void req_conn_close(req_conn *cn) {
 }
 
 #ifdef REQ_USE_OPENSSL
-static int req_tls_handshake(req_client *c, req_conn *cn, const char *host, int64_t deadline) {
+static req_err req_tls_handshake(req_client *c, req_conn *cn, const char *host, int64_t deadline) {
     int rc, err;
     cn->ssl = SSL_new(c->ctx);
     if (!cn->ssl) return REQ_ERR_TLS;
@@ -115,7 +115,7 @@ int req_io_read(req_conn *cn, void *buf, int n, int64_t deadline) {
     }
 }
 
-int req_io_write_all(req_conn *cn, const void *buf, size_t n, int64_t deadline) {
+req_err req_io_write_all(req_conn *cn, const void *buf, size_t n, int64_t deadline) {
     const char *p = (const char *)buf;
     size_t off = 0;
     while (off < n) {
@@ -217,7 +217,7 @@ static int req_tcp_connect(const char *host, int port, int64_t deadline) {
     return fd;
 }
 
-int req_connect_host(req_client *c, req_conn *cn, const req_url *u, int64_t deadline) {
+req_err req_connect_host(req_client *c, req_conn *cn, const req_url *u, int64_t deadline) {
     int fd;
     memset(cn, 0, sizeof(*cn));
     cn->fd = -1;
@@ -231,7 +231,7 @@ int req_connect_host(req_client *c, req_conn *cn, const req_url *u, int64_t dead
     snprintf(cn->host, sizeof(cn->host), "%s", u->host);
 #ifdef REQ_USE_OPENSSL
     if (u->tls) {
-        int te = req_tls_handshake(c, cn, u->host, deadline);
+        req_err te = req_tls_handshake(c, cn, u->host, deadline);
         if (te != REQ_OK) {
             req_conn_close(cn);
             return te;

@@ -172,7 +172,7 @@ typedef struct {
     size_t toff;
 } req_rd;
 
-static int req_rd_fill(req_rd *rd) {
+static req_err req_rd_fill(req_rd *rd) {
     int n;
     if (rd->toff < rd->tlen) return 0;
     rd->toff = rd->tlen = 0;
@@ -184,9 +184,9 @@ static int req_rd_fill(req_rd *rd) {
     return REQ_OK;
 }
 
-static int req_rd_get(req_rd *rd, char *out, size_t want, size_t *got) {
+static req_err req_rd_get(req_rd *rd, char *out, size_t want, size_t *got) {
     size_t n;
-    int e = req_rd_fill(rd);
+    req_err e = req_rd_fill(rd);
     if (e) return e;
     n = rd->tlen - rd->toff;
     if (n > want) n = want;
@@ -196,12 +196,12 @@ static int req_rd_get(req_rd *rd, char *out, size_t want, size_t *got) {
     return REQ_OK;
 }
 
-static int req_rd_line(req_rd *rd, char *line, size_t cap, size_t *out_len) {
+static req_err req_rd_line(req_rd *rd, char *line, size_t cap, size_t *out_len) {
     size_t len = 0;
     for (;;) {
         char ch;
         size_t g = 0;
-        int e = req_rd_get(rd, &ch, 1, &g);
+        req_err e = req_rd_get(rd, &ch, 1, &g);
         if (e) return e;
         if (ch == '\n') {
             if (len > 0 && line[len - 1] == '\r') len--;
@@ -214,12 +214,12 @@ static int req_rd_line(req_rd *rd, char *line, size_t cap, size_t *out_len) {
     }
 }
 
-static int req_read_n(req_rd *rd, req_buf *b, size_t n, size_t max_body) {
+static req_err req_read_n(req_rd *rd, req_buf *b, size_t n, size_t max_body) {
     while (n) {
         char tmp[4096];
         size_t want = n > sizeof(tmp) ? sizeof(tmp) : n;
         size_t g = 0;
-        int e = req_rd_get(rd, tmp, want, &g);
+        req_err e = req_rd_get(rd, tmp, want, &g);
         if (e) return e;
         if (b->len + g > max_body) return REQ_ERR_OVERFLOW;
         if (req_buf_append(b, tmp, g)) return REQ_ERR_OOM;
@@ -291,11 +291,11 @@ static int req_build_request(req_buf *b, const char *method, const req_url *u, c
            (r->body_len && r->body ? req_buf_append(b, r->body, r->body_len) : 0);
 }
 
-static int req_read_headers(req_rd *rd, req_buf *h) {
+static req_err req_read_headers(req_rd *rd, req_buf *h) {
     for (;;) {
         char line[REQ_LINE_MAX];
         size_t ln = 0;
-        int e = req_rd_line(rd, line, sizeof(line), &ln);
+        req_err e = req_rd_line(rd, line, sizeof(line), &ln);
         if (e) return e;
         if (req_buf_append(h, line, ln) || req_buf_append(h, "\r\n", 2)) return REQ_ERR_OOM;
         if (h->len > REQ_HDR_MAX) return REQ_ERR_OVERFLOW;
@@ -313,13 +313,13 @@ static int req_parse_status(const char *headers, int *status) {
     return 0;
 }
 
-static int req_read_chunked(req_rd *rd, req_buf *body, size_t max_body) {
+static req_err req_read_chunked(req_rd *rd, req_buf *body, size_t max_body) {
     for (;;) {
         char line[REQ_LINE_MAX];
         size_t ln = 0;
         unsigned long sz;
         char *ep = NULL;
-        int e = req_rd_line(rd, line, sizeof(line), &ln);
+        req_err e = req_rd_line(rd, line, sizeof(line), &ln);
         if (e) return e;
         sz = strtoul(line, &ep, 16);
         if (ep == line) return REQ_ERR_PARSE;
@@ -360,12 +360,13 @@ static int req_join_location(const req_url *base, const char *loc, char *out, si
     return -1;
 }
 
-static int req_once(req_client *c, const req_request *r, const char *method, const req_url *u,
+static req_err req_once(req_client *c, const req_request *r, const char *method, const req_url *u,
                     req_response *out, int *keep_alive) {
     req_conn *cn = NULL, owned;
     req_buf reqb, hdrs, body;
     req_rd rd;
-    int e, status = 0, pooled = 0;
+    req_err e;
+    int status = 0, pooled = 0;
     char te[64], cl[32], conn[32];
     int64_t deadline;
     memset(&owned, 0, sizeof(owned));
@@ -375,12 +376,12 @@ static int req_once(req_client *c, const req_request *r, const char *method, con
     memset(&body, 0, sizeof(body));
     *keep_alive = 0;
 
-    e = req_build_request(&reqb, method, u, r);
-    if (e == -2) {
+    int br = req_build_request(&reqb, method, u, r);
+    if (br == -2) {
         req_buf_free(&reqb);
         return REQ_ERR_REJECT;
     }
-    if (e) {
+    if (br) {
         req_buf_free(&reqb);
         return REQ_ERR_OOM;
     }
@@ -437,7 +438,7 @@ static int req_once(req_client *c, const req_request *r, const char *method, con
             for (;;) {
                 char tmp[4096];
                 size_t g = 0;
-                int re = req_rd_get(&rd, tmp, sizeof(tmp), &g);
+                req_err re = req_rd_get(&rd, tmp, sizeof(tmp), &g);
                 if (re == REQ_ERR_CLOSED) break;
                 if (re) {
                     e = re;
@@ -507,7 +508,7 @@ static req_response req_send_url(req_client *c, req_request req, const char *url
     if (max_try < 1) max_try = 1;
 
     for (redir = 0; redir <= c->redirects; redir++) {
-        int last = REQ_ERR_IO;
+        req_err last = REQ_ERR_IO;
         if (req_parse_url(urlbuf, &u)) return req_fail(REQ_ERR_URL);
 #ifndef REQ_USE_OPENSSL
         if (u.tls) return req_fail(REQ_ERR_TLS);
