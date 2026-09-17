@@ -1,0 +1,7 @@
+build/
+*.o
+*.a
+tests/test_req
+tests/test_cpp
+examples/get
+.cache/

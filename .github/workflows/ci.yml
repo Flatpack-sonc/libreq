@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Sanitizer tests
+        run: make test SANITIZE=1 && make cpp SANITIZE=1
+      - name: CMake
+        run: |
+          cmake -B build -DSP_SANITIZE=ON -DREQ_WERROR=ON
+          cmake --build build
+          ctest --test-dir build --output-on-failure
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: OpenSSL
+        run: brew install openssl@3
+      - name: Tests
+        run: |
+          PREFIX="$(brew --prefix openssl@3)"
+          export CPPFLAGS="-Iinclude -DREQ_USE_OPENSSL -D_DEFAULT_SOURCE -I$PREFIX/include"
+          export OPENSSL_LIBS="-L$PREFIX/lib -lssl -lcrypto"
+          make test
+      - name: CMake
+        run: |
+          export OPENSSL_ROOT_DIR="$(brew --prefix openssl@3)"
+          cmake -B build -DREQ_WERROR=ON
+          cmake --build build
+          ctest --test-dir build --output-on-failure
