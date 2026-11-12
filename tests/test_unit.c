@@ -176,7 +176,7 @@ static void *feed(void *arg) {
     feeder *f = (feeder *)arg;
     size_t off = 0;
     while (off < f->n) {
-        ssize_t w = send(f->fd, f->data + off, f->n - off, 0);
+        ssize_t w = send(f->fd, f->data + off, f->n - off, REQ_SEND_FLAGS);
         if (w <= 0) break;
         off += (size_t)w;
     }
@@ -200,6 +200,12 @@ static parse_res parse_bytes(const char *data, size_t n, const char *method, siz
         pr.err = REQ_ERR_IO;
         return pr;
     }
+#ifdef SO_NOSIGPIPE
+    {
+        int one = 1; /* the parser may stop early and close its end */
+        setsockopt(sv[1], SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+    }
+#endif
     f.fd = sv[1];
     f.data = data;
     f.n = n;
