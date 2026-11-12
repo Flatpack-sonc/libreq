@@ -259,6 +259,12 @@ static void *accept_thread(void *arg) {
         if (poll(&pfd, 1, 50) <= 0) continue; /* portable wake-up for stop */
         cfd = accept(s->fd, NULL, NULL);
         if (cfd < 0) continue;
+#ifdef SO_NOSIGPIPE
+        {
+            int one = 1; /* server-side writes only; the client under test keeps default SIGPIPE */
+            setsockopt(cfd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+        }
+#endif
         c = (cx *)calloc(1, sizeof(*c));
         c->s = s;
         c->fd = cfd;
