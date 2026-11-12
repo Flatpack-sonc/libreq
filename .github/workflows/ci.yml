@@ -10,15 +10,28 @@ permissions:
 jobs:
   linux:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
     steps:
       - uses: actions/checkout@v5
       - name: Sanitizer tests
-        run: make test SANITIZE=1 && make cpp SANITIZE=1
+        run: make CC=${{ matrix.cc }} test SANITIZE=1 && make CC=${{ matrix.cc }} cpp SANITIZE=1
+      - name: Release build tests
+        run: make clean && make CC=${{ matrix.cc }} test
       - name: CMake
         run: |
-          cmake -B build -DSP_SANITIZE=ON -DREQ_WERROR=ON
+          cmake -B build -DCMAKE_C_COMPILER=${{ matrix.cc }} -DREQ_SANITIZE=ON -DREQ_WERROR=ON
           cmake --build build
           ctest --test-dir build --output-on-failure
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: libFuzzer smoke run
+        run: make fuzz CC=clang FUZZ_TIME=60
 
   macos:
     runs-on: macos-latest
@@ -29,7 +42,7 @@ jobs:
       - name: Tests
         run: |
           PREFIX="$(brew --prefix openssl@3)"
-          export CPPFLAGS="-Iinclude -DREQ_USE_OPENSSL -D_DEFAULT_SOURCE -I$PREFIX/include"
+          export CPPFLAGS="-I$PREFIX/include"
           export OPENSSL_LIBS="-L$PREFIX/lib -lssl -lcrypto"
           make test
       - name: CMake

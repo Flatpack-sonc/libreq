@@ -1,7 +1,16 @@
 build/
+build-*/
 *.o
 *.a
+*.so*
 tests/test_req
+tests/test_unit
 tests/test_cpp
 examples/get
+fuzz/fuzz_url
+fuzz/fuzz_response
+fuzz/corpus_*/
+crash-*
+leak-*
+timeout-*
 .cache/

@@ -2,3 +2,5 @@
 *.c text
 *.h text
 *.md text
+fuzz/seeds_*/** -text
+fuzz/regressions/** -text
