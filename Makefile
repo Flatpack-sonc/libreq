@@ -35,7 +35,7 @@ tests/test_req: tests/test_req.c libreq.a
 	$(CC) $(TEST_CFLAGS) $(CPPFLAGS) $(PTHREAD) $< libreq.a $(OPENSSL_LIBS) $(LDFLAGS) -o $@
 
 tests/test_unit: tests/test_unit.c libreq.a $(HDR)
-	$(CC) $(TEST_CFLAGS) $(CPPFLAGS) $< libreq.a $(OPENSSL_LIBS) $(LDFLAGS) -o $@
+	$(CC) $(TEST_CFLAGS) $(CPPFLAGS) $(PTHREAD) $< libreq.a $(OPENSSL_LIBS) $(LDFLAGS) -o $@
 
 examples/get: examples/get.c libreq.a
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< libreq.a $(OPENSSL_LIBS) $(LDFLAGS) -o $@

@@ -12,7 +12,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     req_buf h, b;
     req_err e;
     const char *method = (size && (data[0] & 1)) ? "HEAD" : "GET";
+    int buf = 1 << 20;
     if (size > 65536 || socketpair(AF_UNIX, SOCK_STREAM, 0, sv) != 0) return 0;
+    /* The input is written before it is read: make sure it fits in the socket buffers. */
+    setsockopt(sv[0], SOL_SOCKET, SO_RCVBUF, &buf, sizeof(buf));
+    setsockopt(sv[1], SOL_SOCKET, SO_SNDBUF, &buf, sizeof(buf));
     if (size && send(sv[1], data, size, 0) != (ssize_t)size) {
         close(sv[0]);
         close(sv[1]);

@@ -2,6 +2,7 @@
  * parser. Links against the static library and uses its internal header. */
 #include "../src/req_internal.h"
 
+#include <pthread.h>
 #include <sys/socket.h>
 
 static int g_fail, g_run;
@@ -163,6 +164,26 @@ typedef struct {
     int keep_alive;
 } parse_res;
 
+typedef struct {
+    int fd;
+    const char *data;
+    size_t n;
+} feeder;
+
+/* Writes the input from another thread: socket buffers can be smaller than the input
+ * (AF_UNIX on macOS defaults to 8 KiB), so writing it all up front would block. */
+static void *feed(void *arg) {
+    feeder *f = (feeder *)arg;
+    size_t off = 0;
+    while (off < f->n) {
+        ssize_t w = send(f->fd, f->data + off, f->n - off, 0);
+        if (w <= 0) break;
+        off += (size_t)w;
+    }
+    shutdown(f->fd, SHUT_WR);
+    return NULL;
+}
+
 static parse_res parse_bytes(const char *data, size_t n, const char *method, size_t max_body) {
     int sv[2];
     req_conn cn;
@@ -170,6 +191,8 @@ static parse_res parse_bytes(const char *data, size_t n, const char *method, siz
     req_buf h, b;
     parse_res pr;
     static char bodycopy[1024];
+    feeder f;
+    pthread_t th;
     memset(&pr, 0, sizeof(pr));
     memset(&h, 0, sizeof(h));
     memset(&b, 0, sizeof(b));
@@ -177,8 +200,15 @@ static parse_res parse_bytes(const char *data, size_t n, const char *method, siz
         pr.err = REQ_ERR_IO;
         return pr;
     }
-    if (n && send(sv[1], data, n, 0) != (ssize_t)n) pr.err = REQ_ERR_IO;
-    shutdown(sv[1], SHUT_WR);
+    f.fd = sv[1];
+    f.data = data;
+    f.n = n;
+    if (pthread_create(&th, NULL, feed, &f) != 0) {
+        close(sv[0]);
+        close(sv[1]);
+        pr.err = REQ_ERR_IO;
+        return pr;
+    }
     memset(&cn, 0, sizeof(cn));
     cn.fd = sv[0];
     rd = (req_rd *)calloc(1, sizeof(*rd));
@@ -188,10 +218,11 @@ static parse_res parse_bytes(const char *data, size_t n, const char *method, siz
     if (!pr.err && b.p && b.p[b.len] != '\0') pr.err = REQ_ERR_PARSE; /* body must be NUL-terminated */
     snprintf(bodycopy, sizeof(bodycopy), "%.*s", (int)b.len, b.p ? b.p : "");
     pr.body = bodycopy;
+    close(sv[0]); /* unblocks the feeder if the parser stopped early */
+    pthread_join(th, NULL);
     free(rd);
     req_buf_free(&h);
     req_buf_free(&b);
-    close(sv[0]);
     close(sv[1]);
     return pr;
 }
