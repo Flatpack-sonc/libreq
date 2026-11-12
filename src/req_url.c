@@ -120,6 +120,8 @@ int req_parse_url(const char *url, req_url *out) {
         if ((size_t)(he - hs) >= sizeof(tmp) || he == hs) return -1;
         memcpy(tmp, hs, (size_t)(he - hs));
         tmp[he - hs] = '\0';
+        /* Only hex digits, ':' and '.': some libcs (macOS) accept zone IDs in inet_pton. */
+        if (tmp[strspn(tmp, "0123456789abcdefABCDEF:.")] != '\0') return -1;
         if (inet_pton(AF_INET6, tmp, &a6) != 1) return -1;
         out->ipv6 = 1;
         if (rb + 1 < auth_end) {
